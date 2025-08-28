@@ -1,27 +1,63 @@
+// src/services/aiAnalyzer.ts
+
+import { GoogleGenAI, Type } from '@google/genai'; // 1. Import 'Type' for schema definition
 import { TrendItem, AIAnalysisResult } from '../types';
 import { logger } from '../utils/logger.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const API_KEY = process.env.GEMINI_API_KEY;
-const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + API_KEY;
+// Load and manage multiple API keys (This logic remains the same)
+const apiKeys: string[] = Object.keys(process.env)
+  .filter(key => key.startsWith('GEMINI_API_KEY_'))
+  .map(key => process.env[key]!)
+  .filter(Boolean);
+
+if (apiKeys.length === 0) {
+  logger.warn('No API keys found in the .env file with the format GEMINI_API_KEY_...');
+} else {
+  logger.info(`Successfully loaded ${apiKeys.length} API keys for rotation.`);
+}
+
+let currentKeyIndex = 0;
+
+function getNextApiKey(): string | undefined {
+  if (apiKeys.length === 0) throw new Error('No available API keys.');
+  const key = apiKeys[currentKeyIndex % apiKeys.length];
+  currentKeyIndex++;
+  return key;
+}
+
+// 2. Define the exact JSON structure we expect from the AI
+const aIResponseSchema = {
+  type: Type.ARRAY,
+  items: {
+    type: Type.OBJECT,
+    properties: {
+      id: { type: Type.NUMBER },
+      saas_potential_score: { type: Type.NUMBER },
+    },
+    required: ['id', 'saas_potential_score'],
+  },
+};
+
 
 /**
- * (SaaS潜力版) 使用AI批量分析趋势，并返回0-100的SaaS产品潜力分数
+ * (SaaS Potential - Official Structured Output) Analyzes trends in batches and returns a 0-100 SaaS potential score.
  */
 export async function analyzeCommercialIntentBatch(trends: TrendItem[]): Promise<AIAnalysisResult[] | null> {
-    if (!API_KEY) {
-      logger.error('Gemini API Key未配置');
-      return null;
-    }
-  
-    const inputForAI = trends.map((trend, index) => ({
-      id: index,
-      title: trend.title,
-      breakdown: trend.breakdown,
-    }));
-  
-    const prompt = `
+  if (apiKeys.length === 0) {
+    logger.error('API key pool is empty. Cannot perform analysis.');
+    return null;
+  }
+
+  const inputForAI = trends.map((trend, index) => ({
+    id: index,
+    title: trend.title,
+    breakdown: trend.breakdown,
+  }));
+
+  // 3. The prompt is now much simpler. We removed all instructions about JSON formatting.
+  const prompt = `
     You are an analyst looking for new Web SaaS or Tool ideas.
     Analyze the "SaaS Potential" for a list of Google search trends and assign a score from 0 to 100.
     Focus ONLY on the 'title' and its 'breakdown' terms.
@@ -36,42 +72,52 @@ export async function analyzeCommercialIntentBatch(trends: TrendItem[]): Promise
 
     ---
     **CRITICAL EXAMPLES:**
-    - A search for "pdf editor online" has VERY HIGH potential (95), because the user is looking for a tool.
-    - A search for "september playstation plus games" has VERY LOW potential (15), because the user is looking for NEWS/INFORMATION, not a tool.
-    - A search for "bills depth chart" has VERY LOW potential (10), because it is a pure informational query for sports stats.
-    - A search for "buy macbook pro" has VERY LOW potential (5), because it is an e-commerce query for a physical product.
-    - A search for "nyt mini crossword" has VERY HIGH potential (90), because the user wants to play a web game/tool.
+    - A search for "pdf editor online" has VERY HIGH potential (95).
+    - A search for "september playstation plus games" has VERY LOW potential (15).
+    - A search for "bills depth chart" has VERY LOW potential (10).
+    - A search for "buy macbook pro" has VERY LOW potential (5).
+    - A search for "nyt mini crossword" has VERY HIGH potential (90).
     ---
 
     **Input Data (JSON Array):**
     ${JSON.stringify(inputForAI, null, 2)}
 
-    **Your Task:**
-    For EACH object in the input array, using the scoring guide and examples above, perform the analysis.
-    Return a single JSON array where each object contains the original "id" and a single key "saas_potential_score".
-    
-    **REQUIRED JSON Output Structure (A single JSON array):**
-    [
-      { "id": 0, "saas_potential_score": 95 },
-      { "id": 1, "saas_potential_score": 15 }
-    ]
-    
-    Provide ONLY the JSON array as your response. Do not include any other text, comments, or markdown formatting.
+    For EACH object in the input array, perform the analysis and provide a score.
   `;
-  
-    try {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      });
-  
-      if (!response.ok) { /* ... (错误处理不变) ... */ return null; }
-  
-      const data = await response.json() as any;
-      const aiResponseText = data.candidates[0].content.parts[0].text
-        .replace(/```json/g, '').replace(/```/g, '').trim();
-      
-      return JSON.parse(aiResponseText) as AIAnalysisResult[];
-    } catch (error) { /* ... (错误处理不变) ... */ return null; }
+
+  try {
+    const apiKey = getNextApiKey();
+
+    if (!apiKey) {
+        logger.error("Failed to get a valid API key from the pool.");
+        return null;
+      }
+    const genAI = new GoogleGenAI({apiKey});
+
+    // 4. Configure the model to use our schema for structured JSON output
+    const response = await genAI.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: aIResponseSchema,
+      },
+    });
+
+    // 5. The response is guaranteed to be a valid JSON string, so we don't need to clean it.
+    const aiResponseText = response.text;
+    
+    if (aiResponseText && typeof aiResponseText === 'string') {
+        return JSON.parse(aiResponseText) as AIAnalysisResult[];
+      } else {
+        logger.error('AI response text was empty, undefined, or not a string.');
+        return null;
+      }
+
+  } catch (error) {
+    logger.error('Error in AI batch analysis with structured output', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
   }
+}

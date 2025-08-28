@@ -13,7 +13,8 @@ import {
   saveJsonToFile, 
   saveCsvToFile, 
   generateOutputPath, 
-  ensureDirectoryExists 
+  ensureDirectoryExists, 
+  saveHighIntentCsvToFile
 } from './utils/helpers.js';
 import { ScraperConfig, ScrapeResult } from './types/index.js';
 import { analyzeCommercialIntentBatch } from './service/analyzer.js';
@@ -182,30 +183,49 @@ export async function main(args: {
     logger.info(`共找到 ${allTrends.length} 条趋势，其中 ${trendsToAnalyze.length} 条需要进行AI分析。`);
 
     if (trendsToAnalyze.length > 0) {
-      const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
-      progressBar.start(trendsToAnalyze.length, 0);
-      const BATCH_SIZE = 25;
-
-      for (let i = 0; i < trendsToAnalyze.length; i += BATCH_SIZE) {
-        const batch = trendsToAnalyze.slice(i, i + BATCH_SIZE);
-        const analyses = await analyzeCommercialIntentBatch(batch);
-        
-        if (analyses) {
-          batch.forEach((trend, index) => {
-            const analysis = analyses[index];
-            if (analysis) {
-              trend.analysis = analysis;
-              const cacheKey = `${(trend as any).country}-${trend.title}`;
-              cache[cacheKey] = analysis;
+        const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
+        progressBar.start(trendsToAnalyze.length, 0);
+        const BATCH_SIZE = 25;
+  
+        for (let i = 0; i < trendsToAnalyze.length; i += BATCH_SIZE) {
+          const batch = trendsToAnalyze.slice(i, i + BATCH_SIZE);
+          
+          // --- 核心改动：为AI调用增加重试逻辑 ---
+          let analyses = null;
+          const maxRetries = 3; // 最多重试3次
+          for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            analyses = await analyzeCommercialIntentBatch(batch);
+            if (analyses) {
+              // 如果成功获取到分析结果，则跳出重试循环
+              break;
             }
-          });
+            // 如果失败了，等待一段时间再重试
+            if (attempt < maxRetries) {
+              const waitTime = 5 * attempt; // 第一次等5秒, 第二次等10秒
+              logger.warn(`批次 ${i/BATCH_SIZE + 1} 分析失败 (尝试 ${attempt}/${maxRetries})。将在 ${waitTime} 秒后重试...`);
+              await delay(waitTime * 1000);
+            } else {
+              logger.error(`批次 ${i/BATCH_SIZE + 1} 在尝试 ${maxRetries} 次后彻底失败。`);
+            }
+          }
+
+          if (analyses) {
+            batch.forEach((trend, index) => {
+              const analysis = analyses[index];
+              if (analysis) {
+                trend.analysis = analysis;
+                const cacheKey = `${(trend as any).country}-${trend.title}`;
+                cache[cacheKey] = analysis;
+              }
+            });
+          }
+          
+          await fs.writeFile(CACHE_FILE, JSON.stringify(cache, null, 2));
+          progressBar.update(i + batch.length);
+          await delay(1500); // 批次间的常规延迟仍然保留
         }
-        await fs.writeFile(CACHE_FILE, JSON.stringify(cache, null, 2)); // 每批后更新缓存
-        progressBar.update(i + batch.length);
-        await delay(1000);
+        progressBar.stop();
       }
-      progressBar.stop();
-    }
     
     // 将缓存的分析结果合并回主数据
     results.forEach(result => {
@@ -227,6 +247,14 @@ export async function main(args: {
         await saveJsonToFile(results, outputPath);
       } else {
         await saveCsvToFile(results, outputPath);
+        const highIntentOutputPath = outputPath.replace('.csv', '-high-intent.csv');
+        await saveHighIntentCsvToFile(results, highIntentOutputPath, 50);
+        try {
+            await fs.access(highIntentOutputPath);
+            logger.info(`高潜力报告 (分数 > 50) 已保存到: ${highIntentOutputPath}`);
+        } catch {
+            logger.info('未发现分数高于50的趋势，未生成高潜力报告。');
+        }
       }
       
       logger.info(`结果已保存到: ${outputPath}`);

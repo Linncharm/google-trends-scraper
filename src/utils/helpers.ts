@@ -44,6 +44,60 @@ export async function saveJsonToFile(data: any, filePath: string): Promise<void>
 }
 
 /**
+ * (新增) 只保存商业意图分数大于指定阈值的CSV数据到文件
+ */
+export async function saveHighIntentCsvToFile(
+  results: ScrapeResult[], 
+  filePath: string, 
+  threshold: number
+): Promise<void> {
+  await ensureDirectoryExists(path.dirname(filePath));
+  
+  // 表头和原函数保持一致
+  const headers = ['Country', 'Timestamp', 'Title', 'Search Volume', 'Time Started', 'Breakdown', 'Status', 'SaaS_Potential_Score'];
+  const rows: string[] = [headers.join(',')];
+  
+  let highIntentCount = 0;
+
+  for (const result of results) {
+    if (result.success && result.trends.length > 0) {
+      for (const trend of result.trends) {
+
+        // --- 核心筛选逻辑 ---
+        // 确保 trend.analysis 存在，并且分数大于阈值
+        if (trend.analysis && trend.analysis.saas_potential_score > threshold) {
+          
+          const ai_intent_score = trend.analysis.saas_potential_score;
+          
+          const row = [
+            `"${result.country.name}"`,
+            `"${result.timestamp}"`,
+            `"${trend.title.replace(/"/g, '""')}"`,
+            `"${trend.searchVolume}"`,
+            `"${trend.timeStarted}"`,
+            `"${trend.breakdown.replace(/"/g, '""').replace(/, /g, '\n')}"`, // 同样使用换行
+            `"${trend.status}"`,
+            `${ai_intent_score}`
+          ].join(',');
+          rows.push(row);
+          highIntentCount++;
+        }
+        // --- 筛选逻辑结束 ---
+      }
+    }
+  }
+  
+  // 如果有高潜力数据，则写入文件
+  if (highIntentCount > 0) {
+    const csvContent = rows.join('\n');
+    await fs.writeFile(filePath, csvContent, 'utf-8');
+  } else {
+    // 如果没有数据，可以选择不创建文件，或创建一个空文件
+    // 这里我们选择不创建文件，并在主程序中打印日志
+  }
+}
+
+/**
  * 保存CSV数据到文件
  */
 export async function saveCsvToFile(results: ScrapeResult[], filePath: string): Promise<void> {

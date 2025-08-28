@@ -22,33 +22,42 @@ export async function analyzeCommercialIntentBatch(trends: TrendItem[]): Promise
     }));
   
     const prompt = `
-      You are an analyst looking for new Web SaaS or Tool ideas.
-      Analyze the "SaaS Potential" for a list of Google search trends and assign a score from 0 to 100.
-      Focus ONLY on the 'title' and its 'breakdown' terms.
-  
-      **Your Goal:** Identify search trends that indicate a user is looking for a digital tool or software solution to solve a problem. Ignore e-commerce/shopping intent.
-  
-      **Scoring Guide for SaaS Potential:**
-      - **91-100 (Very High Potential):** The user is explicitly looking for a software tool. Keywords include "editor", "generator", "converter", "calculator", "template", "checker", "solver", "remover", "downloader", "[competitor name] alternative", or specific tool types like "online mind map".
-      - **61-90 (High Potential):** The user is describing a problem that can be solved by a tool. Keywords include "how to remove background", "convert jpg to png", "create a resume".
-      - **31-60 (Moderate Potential):** The topic is related to a professional field where tools are used, but the query is more informational. (e.g., "what is SEO", "learn photoshop").
-      - **0-30 (Low or No Potential):** This is for e-commerce, news, celebrities, facts, or navigational queries. Keywords like "buy", "price", "shipping", "near me", celebrity names, or specific locations should get a VERY LOW score.
-  
-      **Input Data (JSON Array):**
-      ${JSON.stringify(inputForAI, null, 2)}
-  
-      **Your Task:**
-      For EACH object in the input array, perform the analysis.
-      Return a single JSON array where each object contains the original "id" and a single key "saas_potential_score".
-      
-      **REQUIRED JSON Output Structure (A single JSON array):**
-      [
-        { "id": 0, "saas_potential_score": 95 },
-        { "id": 1, "saas_potential_score": 15 }
-      ]
-      
-      Provide ONLY the JSON array as your response. Do not include any other text, comments, or markdown formatting.
-    `;
+    You are an analyst looking for new Web SaaS or Tool ideas.
+    Analyze the "SaaS Potential" for a list of Google search trends and assign a score from 0 to 100.
+    Focus ONLY on the 'title' and its 'breakdown' terms.
+
+    **Your Goal:** Identify search trends that indicate a user is looking for a digital tool or software solution to solve a problem. Ignore e-commerce/shopping intent and pure informational/news queries.
+
+    **Scoring Guide for SaaS Potential:**
+    - **91-100 (Very High Potential):** User is explicitly looking for a software tool. Keywords: "editor", "generator", "converter", "calculator", "solver", "[competitor] alternative", etc.
+    - **61-90 (High Potential):** User has a problem that can be solved by a tool. Keywords: "how to remove background", "create a resume", etc.
+    - **31-60 (Moderate Potential):** Topic is related to a professional field where tools are used, but the query is broad. e.g., "what is SEO".
+    - **0-30 (Low or No Potential):** E-commerce, news, celebrities, facts. Keywords like "buy", "price", "reviews" for physical products, celebrity names, or news events should get a VERY LOW score.
+
+    ---
+    **CRITICAL EXAMPLES:**
+    - A search for "pdf editor online" has VERY HIGH potential (95), because the user is looking for a tool.
+    - A search for "september playstation plus games" has VERY LOW potential (15), because the user is looking for NEWS/INFORMATION, not a tool.
+    - A search for "bills depth chart" has VERY LOW potential (10), because it is a pure informational query for sports stats.
+    - A search for "buy macbook pro" has VERY LOW potential (5), because it is an e-commerce query for a physical product.
+    - A search for "nyt mini crossword" has VERY HIGH potential (90), because the user wants to play a web game/tool.
+    ---
+
+    **Input Data (JSON Array):**
+    ${JSON.stringify(inputForAI, null, 2)}
+
+    **Your Task:**
+    For EACH object in the input array, using the scoring guide and examples above, perform the analysis.
+    Return a single JSON array where each object contains the original "id" and a single key "saas_potential_score".
+    
+    **REQUIRED JSON Output Structure (A single JSON array):**
+    [
+      { "id": 0, "saas_potential_score": 95 },
+      { "id": 1, "saas_potential_score": 15 }
+    ]
+    
+    Provide ONLY the JSON array as your response. Do not include any other text, comments, or markdown formatting.
+  `;
   
     try {
       const response = await fetch(API_URL, {

@@ -19,7 +19,8 @@ import {
   cleanTimeStarted,
   parseSearchVolume, 
   validateTrendItem,
-  getCurrentTimestamp 
+  getCurrentTimestamp,
+  cleanBreakdown
 } from '../utils/helpers.js';
 
 /**
@@ -145,15 +146,15 @@ export class GoogleTrendsScraper {
       logger.info('初始页面加载完成。');
 
       let currentPage = 1;
-      const maxPages = 20;
+      const maxPages = 5;
 
       while (currentPage <= maxPages) {
-        logger.info(`[调试] 正在解析第 ${currentPage} 页的数据...`);
+        //logger.info(`[调试] 正在解析第 ${currentPage} 页的数据...`);
         await page.waitForSelector(TRENDS_CONFIG.SELECTORS.TREND_TABLE, { timeout: 10000 });
         
         const trendsOnCurrentPage = await this.parseTrendsFromPage(page);
         allTrends.push(...trendsOnCurrentPage);
-        logger.info(`第 ${currentPage} 页找到 ${trendsOnCurrentPage.length} 条数据。`);
+        //logger.info(`第 ${currentPage} 页找到 ${trendsOnCurrentPage.length} 条数据。`);
         
         if (trendsOnCurrentPage.length === 0 && currentPage > 1) {
             logger.warn(`第 ${currentPage} 页未解析到数据，可能已是末页，提前结束。`);
@@ -173,10 +174,10 @@ export class GoogleTrendsScraper {
           button => (button as any).disabled
         );
         
-        logger.info(`[调试] “下一页”按钮状态: ${isNextButtonDisabled ? '禁用' : '可用'}`);
+        //logger.info(`[调试] “下一页”按钮状态: ${isNextButtonDisabled ? '禁用' : '可用'}`);
 
         if (isNextButtonDisabled) {
-          logger.info('“下一页”按钮已禁用，翻页结束。');
+          //logger.info('“下一页”按钮已禁用，翻页结束。');
           break;
         }
 
@@ -185,14 +186,14 @@ export class GoogleTrendsScraper {
         // 1. 点击前，获取当前第一行数据的文本内容
         const firstRowSelector = `${TRENDS_CONFIG.SELECTORS.TREND_ROWS}:first-child ${TRENDS_CONFIG.SELECTORS.TREND_TITLE}`;
         const firstRowTextBeforeClick = await page.$eval(firstRowSelector, el => el.textContent?.trim()).catch(() => null);
-        logger.info(`[调试] 点击前第一行的内容: "${firstRowTextBeforeClick}"`);
+        //logger.info(`[调试] 点击前第一行的内容: "${firstRowTextBeforeClick}"`);
         
         // 2. 点击“下一页”
-        logger.info(`正在点击“下一页”，前往第 ${currentPage + 1} 页...`);
+        //logger.info(`正在点击“下一页”，前往第 ${currentPage + 1} 页...`);
         await page.click(nextButtonSelector);
         
         // 3. 等待第一行的内容发生变化，而不是等待导航
-        logger.info(`[调试] 等待内容更新...`);
+        //logger.info(`[调试] 等待内容更新...`);
         try {
           await page.waitForFunction(
             (selector, initialText) => {
@@ -204,7 +205,7 @@ export class GoogleTrendsScraper {
             firstRowSelector,
             firstRowTextBeforeClick
           );
-          logger.info(`[调试] 第 ${currentPage + 1} 页内容更新完成。`);
+          //logger.info(`[调试] 第 ${currentPage + 1} 页内容更新完成。`);
         } catch (e) {
             logger.error(`[调试] 等待内容更新超时，翻页可能失败。错误: ${e instanceof Error ? e.message : String(e)}`);
             break; // 如果等待超时，则中断翻页
@@ -216,7 +217,7 @@ export class GoogleTrendsScraper {
 
       result.trends = allTrends;
       result.success = true;
-      logger.info(`${country.name}: 爬取完成，共获取 ${allTrends.length} 条趋势数据`);
+      logger.info(`${country.name}: 爬取完成，共获取 ${allTrends.length} 条趋势数据，共 ${currentPage} 页`);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -256,20 +257,40 @@ export class GoogleTrendsScraper {
               return null;
             }
 
+            const breakdownButtons = el.querySelectorAll(selectors.BREAKDOWN_ITEMS);
+
+            const breakdownArray = Array.from(
+              breakdownButtons, 
+              button => button.getAttribute('data-term')?.trim() || ''
+            );
+
             return {
               title: titleEl.textContent?.trim() || '',
               searchVolume: volumeEl.textContent?.trim() || '',
               timeStarted: timeEl.textContent?.trim() || '',
+              breakdown: breakdownArray,
               status: statusEl?.className?.includes('active') ? 'active' : 'lasted'
+              
             };
           }, element, TRENDS_CONFIG.SELECTORS);
 
           if (trendData && trendData.title) {
+
+            const uniqueTerms = [...new Set(trendData.breakdown)];
+
+            const cleanedBreakdownString = uniqueTerms
+              .map(term => cleanBreakdown(term))
+              .filter(term => term) // 移除空字符串
+              .join(', '); // 用 ", " 分隔
+
+
             const trend: TrendItem = {
               title: cleanTrendTitle(trendData.title),
               searchVolume: parseSearchVolume(trendData.searchVolume),
               timeStarted: cleanTimeStarted(trendData.timeStarted),
+              breakdown: cleanedBreakdownString,
               status: trendData.status as 'active' | 'lasted'
+
             };
 
             if (validateTrendItem(trend)) {

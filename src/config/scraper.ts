@@ -29,6 +29,8 @@ export const TRENDS_CONFIG = {
     SEARCH_VOLUME: 'td:nth-child(3)',
     // 开始时间
     TIME_STARTED: 'td:nth-child(4)',
+    /// 相关细分
+    BREAKDOWN_ITEMS: 'button[data-term]',
     // 趋势状态图标
     STATUS_ICON: 'td:nth-child(1) div[class*="icon"]',
     // 加载指示器

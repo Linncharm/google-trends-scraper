@@ -49,7 +49,7 @@ export async function saveJsonToFile(data: any, filePath: string): Promise<void>
 export async function saveCsvToFile(results: ScrapeResult[], filePath: string): Promise<void> {
   await ensureDirectoryExists(path.dirname(filePath));
   
-  const headers = ['Country', 'Timestamp', 'Title', 'Search Volume', 'Time Started', 'Status'];
+  const headers = ['Country', 'Timestamp', 'Title', 'Search Volume', 'Time Started', 'Breakdown', 'Status'];
   const rows: string[] = [headers.join(',')];
   
   for (const result of results) {
@@ -61,6 +61,7 @@ export async function saveCsvToFile(results: ScrapeResult[], filePath: string): 
           `"${trend.title.replace(/"/g, '""')}"`,
           `"${trend.searchVolume}"`,
           `"${trend.timeStarted}"`,
+          `"${trend.breakdown}"`,
           `"${trend.status}"`
         ].join(',');
         rows.push(row);
@@ -110,6 +111,19 @@ export function cleanTimeStarted(timeText: string): string {
     .replace(/trending_up/g, '')
     .replace(/Active/g, '')
     .replace(/Lasted/g, '')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * 清理相关细分，排除掉+ 42 more这样的文本,Search term,query_stats,Explore
+ */
+export function cleanBreakdown(breakdown: string): string {
+  return breakdown
+    .replace(/\+ \d+ more/g, '')
+    .replace(/Search term/g, '')
+    .replace(/query_stats/g, '')
+    .replace(/Explore/g, '')
     .trim()
     .replace(/\s+/g, ' ');
 }

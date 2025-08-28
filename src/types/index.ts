@@ -7,6 +7,7 @@ export interface TrendItem {
   title: string;              // 趋势标题
   searchVolume: string;        // 搜索量
   timeStarted: string;         // 开始时间
+  breakdown: string;           // 相关细分
   status: 'active' | 'lasted'; // 趋势状态
   relatedQueries?: string[];   // 相关查询
   url?: string;               // 相关链接

@@ -1,0 +1,39 @@
+{
+  "name": "google-trends-scraper",
+  "version": "1.0.0",
+  "description": "可扩展的Google Trends数据爬虫项目",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node --esm src/index.ts",
+    "scrape": "node dist/scraper.js",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "google-trends",
+    "scraper",
+    "puppeteer",
+    "typescript",
+    "nodejs"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.55.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "puppeteer": "^21.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^16.3.0",
+    "winston": "^3.11.0"
+  }
+}

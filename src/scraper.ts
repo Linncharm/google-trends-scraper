@@ -124,13 +124,19 @@ function validateCountries(countryCodes: string[]): void {
 /**
  * 主函数
  */
-async function main(): Promise<void> {
+export async function main(args: {
+    countries: string[];
+    format: 'json' | 'csv';
+    headless: boolean;
+    output?: string;
+    timeframe: string;
+  }): Promise<void> {
   try {
     logger.info('=== Google Trends 爬虫开始运行 ===');
 
     // 解析命令行参数
-    const args = parseArguments();
-    logger.info('运行参数', args);
+    // const args = parseArguments();
+    //logger.info('运行参数', args);
 
     // 验证国家代码
     validateCountries(args.countries);
@@ -227,16 +233,16 @@ async function main(): Promise<void> {
     }
 
     // 显示详细结果
-    for (const result of results) {
-      if (result.success) {
-        logger.info(`${result.country.name}: ${result.trends.length} 条趋势`);
-        result.trends.slice(0, 5).forEach((trend, index) => {
-          logger.info(`  ${index + 1}. ${trend.title} (${trend.searchVolume})`);
-        });
-      } else {
-        logger.error(`${result.country.name}: 失败 - ${result.error}`);
-      }
-    }
+    // for (const result of results) {
+    //   if (result.success) {
+    //     logger.info(`${result.country.name}: ${result.trends.length} 条趋势`);
+    //     result.trends.slice(0, 5).forEach((trend, index) => {
+    //       logger.info(`  ${index + 1}. ${trend.title} (${trend.searchVolume})`);
+    //     });
+    //   } else {
+    //     logger.error(`${result.country.name}: 失败 - ${result.error}`);
+    //   }
+    // }
 
     logger.info('=== 爬取任务完成 ===');
     process.exit(0);
@@ -247,8 +253,8 @@ async function main(): Promise<void> {
   }
 }
 
-// 运行主函数
-void main().catch(error => {
-  console.error('未处理的错误', error);
-  process.exit(1);
-});
+// // 运行主函数
+// void main().catch(error => {
+//   console.error('未处理的错误', error);
+//   process.exit(1);
+// });

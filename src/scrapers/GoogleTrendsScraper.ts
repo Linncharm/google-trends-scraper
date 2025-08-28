@@ -309,39 +309,28 @@ export class GoogleTrendsScraper {
     return trends;
   }
 
-  /**
-   * 爬取所有配置的国家
-   */
   async scrapeAll(): Promise<ScrapeResult[]> {
-    this.status = ScraperStatus.RUNNING;
     const results: ScrapeResult[] = [];
-
     try {
       await this.initialize();
+      logger.info(`开始串行爬取 ${this.config.countries.length} 个国家...`);
 
+      // 使用清晰的串行 for...of 循环
       for (const country of this.config.countries) {
-        if (this.status !== ScraperStatus.RUNNING) {
-          logger.info('爬虫已停止');
-          break;
-        }
-
         const result = await this.scrapeCountry(country);
         results.push(result);
 
-        // 请求间隔
-        if (this.config.delay > 0) {
-          await delay(this.config.delay);
+        // 在爬取每个国家之间加入一个短暂的延迟，更像人类行为
+        if (this.config.countries.length > 1) {
+            await delay(2000); // 延迟2秒
         }
       }
 
     } catch (error) {
-      this.status = ScraperStatus.ERROR;
       logger.error('爬虫运行失败', { error });
     } finally {
       await this.cleanup();
-      this.status = ScraperStatus.IDLE;
     }
-
     return results;
   }
 

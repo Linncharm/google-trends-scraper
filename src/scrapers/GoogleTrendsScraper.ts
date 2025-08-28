@@ -146,7 +146,7 @@ export class GoogleTrendsScraper {
       logger.info('初始页面加载完成。');
 
       let currentPage = 1;
-      const maxPages = 5;
+      const maxPages = 25;
 
       while (currentPage <= maxPages) {
         //logger.info(`[调试] 正在解析第 ${currentPage} 页的数据...`);

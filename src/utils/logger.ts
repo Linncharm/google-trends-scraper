@@ -1,5 +1,5 @@
 import winston from 'winston';
-import { LogLevel } from '../types/index.js';
+import { LogLevel } from '../types/index';
 
 /**
  * 日志工具类

@@ -49,12 +49,15 @@ export async function saveJsonToFile(data: any, filePath: string): Promise<void>
 export async function saveCsvToFile(results: ScrapeResult[], filePath: string): Promise<void> {
   await ensureDirectoryExists(path.dirname(filePath));
   
-  const headers = ['Country', 'Timestamp', 'Title', 'Search Volume', 'Time Started', 'Breakdown', 'Status'];
+  const headers = ['Country', 'Timestamp', 'Title', 'Search Volume', 'Time Started', 'Breakdown', 'Status','Commercial Intent Score'];
   const rows: string[] = [headers.join(',')];
   
   for (const result of results) {
     if (result.success && result.trends.length > 0) {
       for (const trend of result.trends) {
+
+        const ai_intent_score = trend.analysis?.saas_potential_score ?? '';
+
         const row = [
           `"${result.country.name}"`,
           `"${result.timestamp}"`,
@@ -62,7 +65,8 @@ export async function saveCsvToFile(results: ScrapeResult[], filePath: string): 
           `"${trend.searchVolume}"`,
           `"${trend.timeStarted}"`,
           `"${trend.breakdown}"`,
-          `"${trend.status}"`
+          `"${trend.status}"`,
+          `"${ai_intent_score}"`
         ].join(',');
         rows.push(row);
       }

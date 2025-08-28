@@ -2,6 +2,10 @@
  * Google Trends相关类型定义
  */
 
+export interface AIAnalysisResult {
+  saas_potential_score: number;
+}
+
 // 趋势数据项
 export interface TrendItem {
   title: string;              // 趋势标题
@@ -11,6 +15,7 @@ export interface TrendItem {
   status: 'active' | 'lasted'; // 趋势状态
   relatedQueries?: string[];   // 相关查询
   url?: string;               // 相关链接
+  analysis?:AIAnalysisResult;
 }
 
 // 国家/地区配置

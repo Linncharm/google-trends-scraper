@@ -16,6 +16,10 @@ import {
   ensureDirectoryExists 
 } from './utils/helpers.js';
 import { ScraperConfig, ScrapeResult } from './types/index.js';
+import { analyzeCommercialIntentBatch } from './service/analyzer.js';
+import fs from 'fs/promises';
+import cliProgress from 'cli-progress';
+import { delay } from './utils/helpers.js';
 
 // 加载环境变量
 dotenv.config();
@@ -157,6 +161,57 @@ async function main(): Promise<void> {
     const totalTrends = results.reduce((sum, r) => sum + r.trends.length, 0);
 
     logger.info(`爬取完成: ${successCount}/${results.length} 个国家成功，共获取 ${totalTrends} 条趋势数据`);
+
+    const CACHE_FILE = './data/ai_analysis_cache.json';
+    let cache: { [key: string]: any } = {};
+    try {
+      cache = JSON.parse(await fs.readFile(CACHE_FILE, 'utf-8'));
+      logger.info(`已加载 ${Object.keys(cache).length} 条缓存的AI分析结果。`);
+    } catch (e) {
+      logger.info('未找到缓存文件，将从头开始分析。');
+    }
+    
+    const allTrends = results.flatMap(r => r.success ? r.trends.map(t => ({...t, country: r.country.code})) : []);
+    const trendsToAnalyze = allTrends.filter(t => !cache[`${t.country}-${t.title}`]);
+    logger.info(`共找到 ${allTrends.length} 条趋势，其中 ${trendsToAnalyze.length} 条需要进行AI分析。`);
+
+    if (trendsToAnalyze.length > 0) {
+      const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
+      progressBar.start(trendsToAnalyze.length, 0);
+      const BATCH_SIZE = 25;
+
+      for (let i = 0; i < trendsToAnalyze.length; i += BATCH_SIZE) {
+        const batch = trendsToAnalyze.slice(i, i + BATCH_SIZE);
+        const analyses = await analyzeCommercialIntentBatch(batch);
+        
+        if (analyses) {
+          batch.forEach((trend, index) => {
+            const analysis = analyses[index];
+            if (analysis) {
+              trend.analysis = analysis;
+              const cacheKey = `${(trend as any).country}-${trend.title}`;
+              cache[cacheKey] = analysis;
+            }
+          });
+        }
+        await fs.writeFile(CACHE_FILE, JSON.stringify(cache, null, 2)); // 每批后更新缓存
+        progressBar.update(i + batch.length);
+        await delay(1000);
+      }
+      progressBar.stop();
+    }
+    
+    // 将缓存的分析结果合并回主数据
+    results.forEach(result => {
+      result.trends.forEach(trend => {
+        const cacheKey = `${result.country.code}-${trend.title}`;
+        if (cache[cacheKey]) {
+          trend.analysis = cache[cacheKey];
+        }
+      });
+    });
+
+    logger.info('AI分析完成。');
 
     // 保存结果
     if (results.length > 0) {

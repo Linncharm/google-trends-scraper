@@ -112,8 +112,10 @@ export class GoogleTrendsScraper {
     }
   }
 
+  // in GoogleTrendsScraper class
+
   /**
-   * 爬取指定国家的趋势数据
+   * 爬取指定国家的趋势数据（修复版，采用内容变化来判断翻页）
    */
   async scrapeCountry(country: CountryConfig): Promise<ScrapeResult> {
     const result: ScrapeResult = {
@@ -122,6 +124,7 @@ export class GoogleTrendsScraper {
       trends: [],
       success: false
     };
+    const allTrends: TrendItem[] = [];
 
     if (!this.browser) {
       result.error = '浏览器未初始化';
@@ -132,45 +135,88 @@ export class GoogleTrendsScraper {
 
     try {
       logger.info(`开始爬取 ${country.name} (${country.code}) 的趋势数据`);
-
-      // 创建新页面
       page = await this.browser.newPage();
-      
-      // 设置User-Agent和其他头部
       await page.setUserAgent(getUserAgent());
-      
-      // 设置页面超时时间
       page.setDefaultTimeout(this.config.timeout);
 
-      // 构建URL
       const url = buildTrendsUrl(country.code, country.language, this.config.timeframe);
       logger.debug(`访问URL: ${url}`);
+      await page.goto(url, { waitUntil: 'networkidle0', timeout: this.config.timeout });
+      logger.info('初始页面加载完成。');
 
-      // 访问页面
-      await page.goto(url, { 
-        waitUntil: 'networkidle0',
-        timeout: this.config.timeout 
-      });
+      let currentPage = 1;
+      const maxPages = 20;
 
-      // 等待页面加载
-      await delay(TRENDS_CONFIG.WAIT_TIME);
+      while (currentPage <= maxPages) {
+        logger.info(`[调试] 正在解析第 ${currentPage} 页的数据...`);
+        await page.waitForSelector(TRENDS_CONFIG.SELECTORS.TREND_TABLE, { timeout: 10000 });
+        
+        const trendsOnCurrentPage = await this.parseTrendsFromPage(page);
+        allTrends.push(...trendsOnCurrentPage);
+        logger.info(`第 ${currentPage} 页找到 ${trendsOnCurrentPage.length} 条数据。`);
+        
+        if (trendsOnCurrentPage.length === 0 && currentPage > 1) {
+            logger.warn(`第 ${currentPage} 页未解析到数据，可能已是末页，提前结束。`);
+            break;
+        }
 
-      // 等待趋势表格加载
-      try {
-        await page.waitForSelector(TRENDS_CONFIG.SELECTORS.TREND_TABLE, { 
-          timeout: 10000 
-        });
-      } catch (error) {
-        logger.warn(`${country.name}: 趋势表格加载超时，尝试继续解析`);
+        const nextButtonSelector = TRENDS_CONFIG.SELECTORS.PAGINATION_NEXT_BUTTON;
+        const nextButton = await page.$(nextButtonSelector);
+
+        if (!nextButton) {
+          logger.info('[调试] 页面上未找到“下一页”按钮，已到达最后一页。');
+          break;
+        }
+
+        const isNextButtonDisabled = await page.$eval(
+          nextButtonSelector,
+          button => (button as any).disabled
+        );
+        
+        logger.info(`[调试] “下一页”按钮状态: ${isNextButtonDisabled ? '禁用' : '可用'}`);
+
+        if (isNextButtonDisabled) {
+          logger.info('“下一页”按钮已禁用，翻页结束。');
+          break;
+        }
+
+        // --- 关键改动：新的等待逻辑 ---
+        
+        // 1. 点击前，获取当前第一行数据的文本内容
+        const firstRowSelector = `${TRENDS_CONFIG.SELECTORS.TREND_ROWS}:first-child ${TRENDS_CONFIG.SELECTORS.TREND_TITLE}`;
+        const firstRowTextBeforeClick = await page.$eval(firstRowSelector, el => el.textContent?.trim()).catch(() => null);
+        logger.info(`[调试] 点击前第一行的内容: "${firstRowTextBeforeClick}"`);
+        
+        // 2. 点击“下一页”
+        logger.info(`正在点击“下一页”，前往第 ${currentPage + 1} 页...`);
+        await page.click(nextButtonSelector);
+        
+        // 3. 等待第一行的内容发生变化，而不是等待导航
+        logger.info(`[调试] 等待内容更新...`);
+        try {
+          await page.waitForFunction(
+            (selector, initialText) => {
+              const firstRow = document.querySelector(selector);
+              // 如果第一行不存在，或者第一行的文本已经不是之前那个了，就认为加载成功
+              return !firstRow || firstRow.textContent?.trim() !== initialText;
+            },
+            { timeout: 15000 }, // 等待15秒
+            firstRowSelector,
+            firstRowTextBeforeClick
+          );
+          logger.info(`[调试] 第 ${currentPage + 1} 页内容更新完成。`);
+        } catch (e) {
+            logger.error(`[调试] 等待内容更新超时，翻页可能失败。错误: ${e instanceof Error ? e.message : String(e)}`);
+            break; // 如果等待超时，则中断翻页
+        }
+        // --- 关键改动结束 ---
+
+        currentPage++;
       }
 
-      // 解析趋势数据
-      const trends = await this.parseTrendsFromPage(page);
-      
-      result.trends = trends;
+      result.trends = allTrends;
       result.success = true;
-      
-      logger.info(`${country.name}: 成功获取 ${trends.length} 条趋势数据`);
+      logger.info(`${country.name}: 爬取完成，共获取 ${allTrends.length} 条趋势数据`);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

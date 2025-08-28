@@ -34,7 +34,9 @@ export const TRENDS_CONFIG = {
     // 加载指示器
     LOADING: '.loading',
     // 错误信息
-    ERROR_MESSAGE: '.error-message'
+    ERROR_MESSAGE: '.error-message',
+
+    PAGINATION_NEXT_BUTTON: 'button[aria-label="Go to next page"]' 
   },
   // 页面加载等待时间
   WAIT_TIME: 5000
@@ -43,10 +45,10 @@ export const TRENDS_CONFIG = {
 /**
  * 构建Google Trends URL
  */
-export function buildTrendsUrl(countryCode: string, language: string, hours: string): string {
+export function buildTrendsUrl(countryCode: string, _language: string, hours: string): string {
   const params = new URLSearchParams({
     geo: countryCode,
-    hl: language,
+    //hl: language, 保持默认en
     hours: hours
   });
   

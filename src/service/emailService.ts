@@ -325,7 +325,7 @@ export class EmailService {
 
       // 解析 CSV 数据
       const { headers, rows } = this.parseCsvFile(csvFilePath);
-      const tableHtml = this.generateHtmlTable(headers, rows, 15); // 显示前15条记录
+      const tableHtml = this.generateHtmlTable(headers, rows,20); // 显示前20条记录
 
       const htmlContent = `
         <!DOCTYPE html>

@@ -87,30 +87,6 @@ export class TrendsScheduler {
         emailEnabled: !!this.emailService,
       });
 
-      //倒计时 hh:mm:ss
-      const updateCountdown = () => {
-        const next = this.job?.nextDate();
-        if (!next) return;
-
-        const diff = next.valueOf() - Date.now();
-        if (diff <= 0) {
-          process.stdout.write(`\r⏳ 下次任务即将开始...       `);
-          return;
-        }
-
-        const hours = Math.floor(diff / 1000 / 3600);
-        const minutes = Math.floor((diff / 1000 % 3600) / 60);
-        const seconds = Math.floor(diff / 1000 % 60);
-
-        const pad = (n: number) => String(n).padStart(2, '0');
-        const countdownStr = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-
-        process.stdout.write(`\r⏳ 距离下次任务还有 ${countdownStr}   `);
-      };
-
-      // 每秒刷新
-      setInterval(updateCountdown, 1000);
-
       // 保持进程运行
       process.on('SIGINT', () => this.stop());
       process.on('SIGTERM', () => this.stop());

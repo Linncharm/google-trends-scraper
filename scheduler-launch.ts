@@ -26,9 +26,9 @@ const highFrequencyScenario = {
   timezone: 'Asia/Shanghai',
 };
 
-// 场景二：标准监控 - 每天上午9点执行，适合日常使用
+// 场景二：标准监控 - 每天上午12点执行，适合日常使用
 const standardScenario = {
-  cronExpression: '0 12 * * *', // 每天上午9点
+  cronExpression: '0 12 * * *', // 每天上午12点
   scraperConfig: {
     countries: ['US', 'IN', 'ID', 'PK', 'NG', 'BR', 'MX', 'PH', 'VN', 'JP'],
     format: 'csv' as const,

@@ -131,7 +131,17 @@ export async function main(args: {
     headless: boolean;
     output?: string;
     timeframe: string;
-  }): Promise<void> {
+  }): Promise<{
+    success: boolean;
+    outputFile?: string;
+    summary?: {
+      totalTrends: number;
+      highPotentialCount: number;
+      countries: string[];
+      timeframe: string;
+    };
+    error?: string;
+  }> {
   try {
     logger.info('=== Google Trends 爬虫开始运行 ===');
 
@@ -240,8 +250,11 @@ export async function main(args: {
     logger.info('AI分析完成。');
 
     // 保存结果
+    let outputPath = '';
+    let highPotentialCount = 0;
+    
     if (results.length > 0) {
-      const outputPath = args.output || generateOutputPath('all', args.format);
+      outputPath = args.output || generateOutputPath('all', args.format);
       
       if (args.format === 'json') {
         await saveJsonToFile(results, outputPath);
@@ -252,6 +265,13 @@ export async function main(args: {
         try {
             await fs.access(highIntentOutputPath);
             logger.info(`高潜力报告 (分数 > 50) 已保存到: ${highIntentOutputPath}`);
+            // 计算高潜力趋势数量
+            highPotentialCount = results.reduce((count, result) => {
+              return count + result.trends.filter(trend => 
+                trend.analysis && trend.analysis.saas_potential_score > 50
+              ).length;
+            }, 0);
+            outputPath = highIntentOutputPath; // 使用高潜力报告作为主要输出
         } catch {
             logger.info('未发现分数高于50的趋势，未生成高潜力报告。');
         }
@@ -273,11 +293,27 @@ export async function main(args: {
     // }
 
     logger.info('=== 爬取任务完成 ===');
-    process.exit(0);
+    
+    // 返回成功结果
+    return {
+      success: true,
+      outputFile: outputPath,
+      summary: {
+        totalTrends,
+        highPotentialCount,
+        countries: args.countries,
+        timeframe: args.timeframe,
+      }
+    };
 
   } catch (error) {
     logger.error('程序运行失败', { error });
-    process.exit(1);
+    
+    // 返回失败结果
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
   }
 }
 

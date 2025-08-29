@@ -41,4 +41,20 @@ console.log('无头模式:', scenarioToRun.headless);
 console.log('---------------------------');
 
 // 直接调用 main 函数，并传入配置对象
-main(scenarioToRun);
+main(scenarioToRun).then(result => {
+  if (result.success) {
+    console.log('✅ 爬取成功完成');
+    console.log(`📄 输出文件: ${result.outputFile}`);
+    if (result.summary) {
+      console.log(`📊 共获取 ${result.summary.totalTrends} 条趋势数据`);
+      console.log(`🎯 高潜力趋势: ${result.summary.highPotentialCount} 条`);
+    }
+    process.exit(0);
+  } else {
+    console.error('❌ 爬取失败:', result.error);
+    process.exit(1);
+  }
+}).catch(error => {
+  console.error('❌ 未处理的错误:', error);
+  process.exit(1);
+});

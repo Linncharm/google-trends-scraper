@@ -10,6 +10,9 @@
 - 🔧 **灵活配置**: 可配置请求间隔、超时时间、浏览器模式等
 - 📝 **完整日志**: 详细的运行日志记录和错误处理
 - 🌍 **多国家支持**: 内置 15+ 国家/地区配置
+- ⏰ **定时任务**: 支持自动化定时爬取和邮件报告
+- 📧 **邮件通知**: 自动发送爬取结果到指定邮箱
+- 🤖 **AI 分析**: 集成 Gemini AI 进行趋势商业潜力分析
 
 ## 支持的国家/地区
 
@@ -58,6 +61,29 @@ pnpm run scrape -- -c US -t 48 -f csv
 # 显示浏览器窗口（调试模式）
 pnpm run scrape -- --no-headless
 ```
+
+### 📅 定时任务 (推荐)
+
+配置自动化定时爬取和邮件发送：
+
+```bash
+# 1. 复制配置文件
+cp env.example .env
+
+# 2. 编辑 .env 文件，配置邮箱等信息
+# 详见 SCHEDULER_SETUP.md
+
+# 3. 安装依赖
+npm install
+
+# 4. 测试运行一次
+./start-scheduler.sh --once
+
+# 5. 启动定时任务
+./start-scheduler.sh
+```
+
+**详细设置指南**: 请查看 [SCHEDULER_SETUP.md](./SCHEDULER_SETUP.md)
 
 ### 命令行参数
 

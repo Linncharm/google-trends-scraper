@@ -76,7 +76,7 @@ const weekdayScenario = {
 
 // 场景五：测试场景 - 每2分钟执行一次（仅用于测试）
 const testScenario = {
-  cronExpression: '*/2 * * * *', // 每2分钟
+  cronExpression: '*/2 * * * *', 
   scraperConfig: {
     countries: ['BR'], // 只爬取巴西，减少测试时间
     format: 'csv' as const,
@@ -96,7 +96,7 @@ const testScenario = {
  * 选择要运行的场景
  * 可选值：highFrequencyScenario, standardScenario, g7Scenario, weekdayScenario, testScenario
  */
-const scenarioToRun = testScenario
+const scenarioToRun = standardScenario
 
 // =======================================================
 

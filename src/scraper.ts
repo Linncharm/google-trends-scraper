@@ -21,9 +21,19 @@ import { analyzeCommercialIntentBatch } from './service/analyzer.js';
 import fs from 'fs/promises';
 import cliProgress from 'cli-progress';
 import { delay } from './utils/helpers.js';
+import { createClient } from '@supabase/supabase-js'; // 新增
+
 
 // 加载环境变量
 dotenv.config();
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error("Supabase URL 和 Key 未在 .env 文件中配置");
+}
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 /**
  * 解析命令行参数
@@ -122,6 +132,57 @@ function validateCountries(countryCodes: string[]): void {
   }
 }
 
+// ... 放在 main 函数定义之前 ...
+
+/**
+ * 将爬取结果保存到 Supabase
+ * @param results 爬取结果数组
+ */
+async function saveResultsToSupabase(results: ScrapeResult[]): Promise<number> {
+  const trendsToInsert = [];
+
+  for (const result of results) {
+    if (result.success && result.trends.length > 0) {
+      for (const trend of result.trends) {
+        // ▼▼▼ 在这里添加判断条件 ▼▼▼
+        if (trend.status === 'active') { 
+          trendsToInsert.push({
+            country_code: result.country.code,
+            scraped_at: new Date(result.timestamp),
+            title: trend.title,
+            search_volume_base: trend.searchVolume, 
+            trend_percentage: trend.searchTrend, 
+            time_started: trend.timeStarted,
+            breakdown: trend.breakdown,
+            status: trend.status, // 此时 status 必然是 'active'
+          });
+        }
+      }
+    }
+  }
+
+  if (trendsToInsert.length === 0) {
+    logger.info("没有新的趋势数据需要插入数据库。");
+    return 0;
+  }
+
+  const { error } = await supabase
+    .from('google_trends')
+    .upsert(trendsToInsert, {
+      onConflict: 'country_code, title, scraped_at', // 指定冲突判定的列
+      ignoreDuplicates: true // 关键：如果冲突，则忽略，不更新也不报错
+    });
+
+  if (error) {
+    logger.error('数据插入 Supabase 失败', error);
+    return 0;
+  }
+
+  const insertedCount = trendsToInsert.length;
+  logger.info(`成功向 Supabase 推送 ${insertedCount} 条数据进行处理。`);
+  return insertedCount;
+}
+
 /**
  * 主函数
  */
@@ -136,7 +197,8 @@ export async function main(args: {
     outputFile?: string;
     summary?: {
       totalTrends: number;
-      highPotentialCount: number;
+      //highPotentialCount: number;
+      insertedCount: number;
       countries: string[];
       timeframe: string;
     };
@@ -179,106 +241,107 @@ export async function main(args: {
 
     logger.info(`爬取完成: ${successCount}/${results.length} 个国家成功，共获取 ${totalTrends} 条趋势数据`);
 
-    const CACHE_FILE = './data/ai_analysis_cache.json';
-    let cache: { [key: string]: any } = {};
-    try {
-      cache = JSON.parse(await fs.readFile(CACHE_FILE, 'utf-8'));
-      logger.info(`已加载 ${Object.keys(cache).length} 条缓存的AI分析结果。`);
-    } catch (e) {
-      logger.info('未找到缓存文件，将从头开始分析。');
-    }
+    // 本地ai逻辑
+    // const CACHE_FILE = './data/ai_analysis_cache.json';
+    // let cache: { [key: string]: any } = {};
+    // try {
+    //   cache = JSON.parse(await fs.readFile(CACHE_FILE, 'utf-8'));
+    //   logger.info(`已加载 ${Object.keys(cache).length} 条缓存的AI分析结果。`);
+    // } catch (e) {
+    //   logger.info('未找到缓存文件，将从头开始分析。');
+    // }
     
-    const allTrends = results.flatMap(r => r.success ? r.trends.map(t => ({...t, country: r.country.code})) : []);
-    const trendsToAnalyze = allTrends.filter(t => !cache[`${t.country}-${t.title}`]);
-    logger.info(`共找到 ${allTrends.length} 条趋势，其中 ${trendsToAnalyze.length} 条需要进行AI分析。`);
+    // const allTrends = results.flatMap(r => r.success ? r.trends.map(t => ({...t, country: r.country.code})) : []);
+    // const trendsToAnalyze = allTrends.filter(t => !cache[`${t.country}-${t.title}`]);
+    // logger.info(`共找到 ${allTrends.length} 条趋势，其中 ${trendsToAnalyze.length} 条需要进行AI分析。`);
 
-    if (trendsToAnalyze.length > 0) {
-        const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
-        progressBar.start(trendsToAnalyze.length, 0);
-        const BATCH_SIZE = 25;
+    // if (trendsToAnalyze.length > 0) {
+    //     const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
+    //     progressBar.start(trendsToAnalyze.length, 0);
+    //     const BATCH_SIZE = 25;
   
-        for (let i = 0; i < trendsToAnalyze.length; i += BATCH_SIZE) {
-          const batch = trendsToAnalyze.slice(i, i + BATCH_SIZE);
+    //     for (let i = 0; i < trendsToAnalyze.length; i += BATCH_SIZE) {
+    //       const batch = trendsToAnalyze.slice(i, i + BATCH_SIZE);
           
-          // --- 核心改动：为AI调用增加重试逻辑 ---
-          let analyses = null;
-          const maxRetries = 3; // 最多重试3次
-          for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            analyses = await analyzeCommercialIntentBatch(batch);
-            if (analyses) {
-              // 如果成功获取到分析结果，则跳出重试循环
-              break;
-            }
-            // 如果失败了，等待一段时间再重试
-            if (attempt < maxRetries) {
-              const waitTime = 5 * attempt; // 第一次等5秒, 第二次等10秒
-              logger.warn(`批次 ${i/BATCH_SIZE + 1} 分析失败 (尝试 ${attempt}/${maxRetries})。将在 ${waitTime} 秒后重试...`);
-              await delay(waitTime * 1000);
-            } else {
-              logger.error(`批次 ${i/BATCH_SIZE + 1} 在尝试 ${maxRetries} 次后彻底失败。`);
-            }
-          }
+    //       // --- 核心改动：为AI调用增加重试逻辑 ---
+    //       let analyses = null;
+    //       const maxRetries = 3; // 最多重试3次
+    //       for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    //         analyses = await analyzeCommercialIntentBatch(batch);
+    //         if (analyses) {
+    //           // 如果成功获取到分析结果，则跳出重试循环
+    //           break;
+    //         }
+    //         // 如果失败了，等待一段时间再重试
+    //         if (attempt < maxRetries) {
+    //           const waitTime = 5 * attempt; // 第一次等5秒, 第二次等10秒
+    //           logger.warn(`批次 ${i/BATCH_SIZE + 1} 分析失败 (尝试 ${attempt}/${maxRetries})。将在 ${waitTime} 秒后重试...`);
+    //           await delay(waitTime * 1000);
+    //         } else {
+    //           logger.error(`批次 ${i/BATCH_SIZE + 1} 在尝试 ${maxRetries} 次后彻底失败。`);
+    //         }
+    //       }
 
-          if (analyses) {
-            batch.forEach((trend, index) => {
-              const analysis = analyses[index];
-              if (analysis) {
-                trend.analysis = analysis;
-                const cacheKey = `${(trend as any).country}-${trend.title}`;
-                cache[cacheKey] = analysis;
-              }
-            });
-          }
+    //       if (analyses) {
+    //         batch.forEach((trend, index) => {
+    //           const analysis = analyses[index];
+    //           if (analysis) {
+    //             trend.analysis = analysis;
+    //             const cacheKey = `${(trend as any).country}-${trend.title}`;
+    //             cache[cacheKey] = analysis;
+    //           }
+    //         });
+    //       }
           
-          await fs.writeFile(CACHE_FILE, JSON.stringify(cache, null, 2));
-          progressBar.update(i + batch.length);
-          await delay(1500); // 批次间的常规延迟仍然保留
-        }
-        progressBar.stop();
-      }
+    //       await fs.writeFile(CACHE_FILE, JSON.stringify(cache, null, 2));
+    //       progressBar.update(i + batch.length);
+    //       await delay(1500); // 批次间的常规延迟仍然保留
+    //     }
+    //     progressBar.stop();
+    //   }
     
-    // 将缓存的分析结果合并回主数据
-    results.forEach(result => {
-      result.trends.forEach(trend => {
-        const cacheKey = `${result.country.code}-${trend.title}`;
-        if (cache[cacheKey]) {
-          trend.analysis = cache[cacheKey];
-        }
-      });
-    });
+    // // 将缓存的分析结果合并回主数据
+    // results.forEach(result => {
+    //   result.trends.forEach(trend => {
+    //     const cacheKey = `${result.country.code}-${trend.title}`;
+    //     if (cache[cacheKey]) {
+    //       trend.analysis = cache[cacheKey];
+    //     }
+    //   });
+    // });
 
-    logger.info('AI分析完成。');
+    // logger.info('AI分析完成。');
 
-    // 保存结果
-    let outputPath = '';
-    let highPotentialCount = 0;
+    // // 保存结果
+    // let outputPath = '';
+    // let highPotentialCount = 0;
     
-    if (results.length > 0) {
-      outputPath = args.output || generateOutputPath('all', args.format);
+    // if (results.length > 0) {
+    //   outputPath = args.output || generateOutputPath('all', args.format);
       
-      if (args.format === 'json') {
-        await saveJsonToFile(results, outputPath);
-      } else {
-        await saveCsvToFile(results, outputPath);
-        const highIntentOutputPath = outputPath.replace('.csv', '-high-intent.csv');
-        await saveHighIntentCsvToFile(results, highIntentOutputPath, 50);
-        try {
-            await fs.access(highIntentOutputPath);
-            logger.info(`高潜力报告 (分数 > 50) 已保存到: ${highIntentOutputPath}`);
-            // 计算高潜力趋势数量
-            highPotentialCount = results.reduce((count, result) => {
-              return count + result.trends.filter(trend => 
-                trend.analysis && trend.analysis.saas_potential_score > 50
-              ).length;
-            }, 0);
-            outputPath = highIntentOutputPath; // 使用高潜力报告作为主要输出
-        } catch {
-            logger.info('未发现分数高于50的趋势，未生成高潜力报告。');
-        }
-      }
+    //   if (args.format === 'json') {
+    //     await saveJsonToFile(results, outputPath);
+    //   } else {
+    //     await saveCsvToFile(results, outputPath);
+    //     const highIntentOutputPath = outputPath.replace('.csv', '-high-intent.csv');
+    //     await saveHighIntentCsvToFile(results, highIntentOutputPath, 50);
+    //     try {
+    //         await fs.access(highIntentOutputPath);
+    //         logger.info(`高潜力报告 (分数 > 50) 已保存到: ${highIntentOutputPath}`);
+    //         // 计算高潜力趋势数量
+    //         highPotentialCount = results.reduce((count, result) => {
+    //           return count + result.trends.filter(trend => 
+    //             trend.analysis && trend.analysis.saas_potential_score > 50
+    //           ).length;
+    //         }, 0);
+    //         outputPath = highIntentOutputPath; // 使用高潜力报告作为主要输出
+    //     } catch {
+    //         logger.info('未发现分数高于50的趋势，未生成高潜力报告。');
+    //     }
+    //   }
       
-      logger.info(`结果已保存到: ${outputPath}`);
-    }
+    //   logger.info(`结果已保存到: ${outputPath}`);
+    // }
 
     // 显示详细结果
     // for (const result of results) {
@@ -292,15 +355,16 @@ export async function main(args: {
     //   }
     // }
 
+    const insertedCount = await saveResultsToSupabase(results);
+
     logger.info('=== 爬取任务完成 ===');
     
     // 返回成功结果
     return {
       success: true,
-      outputFile: outputPath,
       summary: {
         totalTrends,
-        highPotentialCount,
+        insertedCount, // 新增插入数量
         countries: args.countries,
         timeframe: args.timeframe,
       }

@@ -9,7 +9,8 @@ export interface AIAnalysisResult {
 // 趋势数据项
 export interface TrendItem {
   title: string;              // 趋势标题
-  searchVolume: string;        // 搜索量
+  searchVolume: number;        // 搜索量
+  searchTrend: number;        // 搜索量趋势
   timeStarted: string;         // 开始时间
   breakdown: string;           // 相关细分
   status: 'active' | 'lasted'; // 趋势状态

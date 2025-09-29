@@ -32,7 +32,7 @@ export const TRENDS_CONFIG = {
     /// 相关细分
     BREAKDOWN_ITEMS: 'button[data-term]',
     // 趋势状态图标
-    STATUS_ICON: 'td:nth-child(1) div[class*="icon"]',
+    //STATUS_ICON: 'td:nth-child(1) div[class*="icon"]',
     // 加载指示器
     LOADING: '.loading',
     // 错误信息

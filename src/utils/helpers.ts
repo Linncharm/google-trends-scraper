@@ -189,8 +189,48 @@ export function cleanBreakdown(breakdown: string): string {
 /**
  * 解析搜索量字符串
  */
-export function parseSearchVolume(volume: string): string {
-  return volume.trim().replace(/[^\d+KMB]/g, '');
+/**
+ * 解析复杂的搜索量字符串，例如 "10K+100%" 或 "500K+-50%"
+ * @param volumeStr 原始字符串
+ * @returns 返回一个包含基础量级和趋势百分比的对象
+ */
+export function parseComplexSearchVolume(volumeStr: string): { volume: number; trend: number } {
+  if (!volumeStr) {
+    return { volume: 0, trend: 0 };
+  }
+
+  // 正则表达式来分离量级和趋势部分
+  // 它会匹配像 "10K+" (量级) 和 "+100" (趋势) 这样的部分
+  const match = volumeStr.match(/([\d,.]+[KM]?\+?)\s*([+-]\d+)/);
+
+  let volumePart: string | undefined;
+  let trendPart: string | undefined;
+
+  if (match) {
+    volumePart = match[1]; // "10K+"
+    trendPart = match[2];  // "+100"
+  } else {
+    // 如果不匹配，说明可能只有量级部分，例如 "5K+"
+    volumePart = volumeStr;
+  }
+
+  // --- 解析量级部分 ---
+  let volume = 0;
+  if (volumePart) {
+    const num = parseFloat(volumePart.replace(/,/g, ''));
+    if (volumePart.toUpperCase().includes('K')) {
+      volume = Math.floor(num * 1000);
+    } else if (volumePart.toUpperCase().includes('M')) {
+      volume = Math.floor(num * 1000000);
+    } else {
+      volume = Math.floor(num);
+    }
+  }
+
+  // --- 解析趋势部分 ---
+  const trend = trendPart ? parseInt(trendPart, 10) : 0;
+  
+  return { volume, trend };
 }
 
 /**

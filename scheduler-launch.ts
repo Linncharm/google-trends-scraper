@@ -36,7 +36,7 @@ const standardScenario = {
     timeframe: '24',
   },
   emailConfig: {
-    enabled: true,
+    enabled: false,
     to: process.env.EMAIL_TO || '',
   },
   timezone: 'Asia/Shanghai',

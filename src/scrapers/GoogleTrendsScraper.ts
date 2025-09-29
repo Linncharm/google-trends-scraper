@@ -17,10 +17,10 @@ import {
   delay, 
   cleanTrendTitle, 
   cleanTimeStarted,
-  parseSearchVolume, 
   validateTrendItem,
   getCurrentTimestamp,
-  cleanBreakdown
+  cleanBreakdown,
+  parseComplexSearchVolume
 } from '../utils/helpers.js';
 
 /**
@@ -251,7 +251,7 @@ export class GoogleTrendsScraper {
             const titleEl = el.querySelector(selectors.TREND_TITLE);
             const volumeEl = el.querySelector(selectors.SEARCH_VOLUME);
             const timeEl = el.querySelector(selectors.TIME_STARTED);
-            const statusEl = el.querySelector(selectors.STATUS_ICON);
+            //const statusEl = el.querySelector(selectors.STATUS_ICON);
 
             if (!titleEl || !volumeEl || !timeEl) {
               return null;
@@ -269,7 +269,7 @@ export class GoogleTrendsScraper {
               searchVolume: volumeEl.textContent?.trim() || '',
               timeStarted: timeEl.textContent?.trim() || '',
               breakdown: breakdownArray,
-              status: statusEl?.className?.includes('active') ? 'active' : 'lasted'
+              status: timeEl.textContent?.trim().includes('active') ? 'active' : 'lasted'
               
             };
           }, element, TRENDS_CONFIG.SELECTORS);
@@ -283,10 +283,12 @@ export class GoogleTrendsScraper {
               .filter(term => term) // 移除空字符串
               .join(', '); // 用 ", " 分隔
 
+              const { trend:searchTrend,volume:searchVolume } = parseComplexSearchVolume(trendData.searchVolume)
 
             const trend: TrendItem = {
               title: cleanTrendTitle(trendData.title),
-              searchVolume: parseSearchVolume(trendData.searchVolume),
+              searchVolume: searchVolume,
+              searchTrend:searchTrend,
               timeStarted: cleanTimeStarted(trendData.timeStarted),
               breakdown: cleanedBreakdownString,
               status: trendData.status as 'active' | 'lasted'

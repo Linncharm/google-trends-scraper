@@ -47,7 +47,9 @@ main(scenarioToRun).then(result => {
     console.log(`📄 输出文件: ${result.outputFile}`);
     if (result.summary) {
       console.log(`📊 共获取 ${result.summary.totalTrends} 条趋势数据`);
-      console.log(`🎯 高潜力趋势: ${result.summary.highPotentialCount} 条`);
+      // console.log(`🎯 高潜力趋势: ${result.summary.highPotentialCount} 条`);
+      console.log(`📊 数据库共插入 ${result.summary.insertedCount} 条趋势数据`);
+
     }
     process.exit(0);
   } else {

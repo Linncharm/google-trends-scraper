@@ -153,6 +153,7 @@ export class GoogleTrendsScraper {
         await page.waitForSelector(TRENDS_CONFIG.SELECTORS.TREND_TABLE, { timeout: 10000 });
         
         const trendsOnCurrentPage = await this.parseTrendsFromPage(page);
+
         allTrends.push(...trendsOnCurrentPage);
         //logger.info(`第 ${currentPage} 页找到 ${trendsOnCurrentPage.length} 条数据。`);
         
@@ -241,8 +242,6 @@ export class GoogleTrendsScraper {
     try {
       // 获取所有趋势行
       const trendElements = await page.$$(TRENDS_CONFIG.SELECTORS.TREND_ROWS);
-      
-      logger.debug(`找到 ${trendElements.length} 个趋势元素`);
 
       for (const element of trendElements) {
         try {
@@ -269,7 +268,7 @@ export class GoogleTrendsScraper {
               searchVolume: volumeEl.textContent?.trim() || '',
               timeStarted: timeEl.textContent?.trim() || '',
               breakdown: breakdownArray,
-              status: timeEl.textContent?.trim().includes('active') ? 'active' : 'lasted'
+              status: timeEl.textContent?.trim().includes('timelapse') ? 'lasted' : 'active'
               
             };
           }, element, TRENDS_CONFIG.SELECTORS);
@@ -283,7 +282,7 @@ export class GoogleTrendsScraper {
               .filter(term => term) // 移除空字符串
               .join(', '); // 用 ", " 分隔
 
-              const { trend:searchTrend,volume:searchVolume } = parseComplexSearchVolume(trendData.searchVolume)
+            const { trend:searchTrend,volume:searchVolume } = parseComplexSearchVolume(trendData.searchVolume)
 
             const trend: TrendItem = {
               title: cleanTrendTitle(trendData.title),
@@ -297,6 +296,8 @@ export class GoogleTrendsScraper {
 
             if (validateTrendItem(trend)) {
               trends.push(trend);
+            } else {
+              console.log("parse error")
             }
           }
         } catch (error) {
@@ -305,7 +306,7 @@ export class GoogleTrendsScraper {
       }
 
     } catch (error) {
-      logger.error('解析页面趋势数据失败', { error });
+      console.error('解析页面趋势数据失败', { error });
     }
 
     return trends;

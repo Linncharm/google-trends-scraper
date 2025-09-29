@@ -3,6 +3,61 @@ import path from 'path';
 import { TrendItem, ScrapeResult } from '../types/index.js';
 
 /**
+ * 市场分组的枚举对象。
+ * - 键 (e.g., G7_DEVELOPED): 在代码中清晰、安全地使用。
+ * - 值 (e.g., 'g7_developed'): 存储在数据库中的简洁、无空格的标识符。
+ */
+export const MarketGroupEnum = {
+  HIGH_POTENTIAL_TEN: 'high_potential_ten',
+  G7_DEVELOPED:       'g7_developed',
+  EUROPEAN_CORE:      'european_core',
+  ANGLOSPHERE:        'anglosphere',
+  ASEAN_DIGITAL:      'asean_digital',
+  LATAM_MAJOR:        'latam_major',
+  MENA_HUBS:          'mena_hubs'
+} as const; // 'as const' 提供了更强的类型安全，让其行为更像一个真正的枚举
+
+
+/**
+ * 国家分组数据结构。
+ * 键是来自 MarketGroupEnum 的值，值是国家代码数组。
+ */
+export const marketGroups: Record<string, string[]> = {
+  [MarketGroupEnum.HIGH_POTENTIAL_TEN]: ['US', 'IN', 'ID', 'PK', 'NG', 'BR', 'MX', 'PH', 'VN', 'JP'],
+  [MarketGroupEnum.G7_DEVELOPED]:       ['US', 'CA', 'GB', 'DE', 'FR', 'IT', 'JP'],
+  [MarketGroupEnum.EUROPEAN_CORE]:      ['DE', 'GB', 'FR', 'ES', 'NL', 'SE'],
+  [MarketGroupEnum.ANGLOSPHERE]:        ['US', 'GB', 'CA', 'AU', 'NZ', 'IE'],
+  [MarketGroupEnum.ASEAN_DIGITAL]:      ['ID', 'PH', 'VN', 'TH', 'MY', 'SG'],
+  [MarketGroupEnum.LATAM_MAJOR]:        ['BR', 'MX', 'AR', 'CO', 'CL', 'PE'],
+  [MarketGroupEnum.MENA_HUBS]:          ['AE', 'SA', 'EG']
+};
+
+
+// (将这段逻辑紧跟在 marketGroups 定义之后)
+
+// 创建一个反向映射，方便快速查找： { 'US': 'high_potential_ten', 'CA': 'g7_developed', ... }
+const countryToGroupMap = new Map<string, string>();
+
+// 使用 Object.entries 和新的 marketGroups 结构来构建映射
+for (const [groupName, countries] of Object.entries(marketGroups)) {
+  countries.forEach(countryCode => {
+    // 按定义顺序，确保每个国家只被映射到第一个出现的分组
+    if (!countryToGroupMap.has(countryCode)) {
+      countryToGroupMap.set(countryCode, groupName);
+    }
+  });
+}
+
+/**
+ * 根据国家代码获取其所属的市场分组标识符。
+ * @param countryCode 国家的ISO代码，例如 'US'
+ * @returns 返回数据库友好的分组标识符 (e.g., 'g7_developed')，如果未找到则返回 'other'
+ */
+export function getMarketGroup(countryCode: string): string {
+  return countryToGroupMap.get(countryCode) || 'other';
+}
+
+/**
  * 延迟函数
  */
 export function delay(ms: number): Promise<void> {
@@ -147,7 +202,8 @@ export function validateTrendItem(item: any): item is TrendItem {
   return (
     typeof item === 'object' &&
     typeof item.title === 'string' &&
-    typeof item.searchVolume === 'string' &&
+    typeof item.searchVolume === 'number' &&
+    typeof item.searchTrend === 'number' && 
     typeof item.timeStarted === 'string' &&
     (item.status === 'active' || item.status === 'lasted')
   );
@@ -199,22 +255,27 @@ export function parseComplexSearchVolume(volumeStr: string): { volume: number; t
     return { volume: 0, trend: 0 };
   }
 
-  // 正则表达式来分离量级和趋势部分
-  // 它会匹配像 "10K+" (量级) 和 "+100" (趋势) 这样的部分
-  const match = volumeStr.match(/([\d,.]+[KM]?\+?)\s*([+-]\d+)/);
+  // ▼▼▼ 核心改动 1：使用更强大的正则表达式 ▼▼▼
+  // 这个表达式能捕获三部分：
+  // 1. 量级部分 (例如 "200K+")
+  // 2. 中间的文本 (例如 "arrow_upward")
+  // 3. 趋势的数值部分 (例如 "1,000")
+  const match = volumeStr.match(/^([\d,.]+[KM]?\+?)(.*?)([\d,]+)%?$/);
 
   let volumePart: string | undefined;
-  let trendPart: string | undefined;
+  let middlePart: string | undefined; // 用于判断趋势方向
+  let trendPart: string | undefined;  // 趋势的数值
 
   if (match) {
-    volumePart = match[1]; // "10K+"
-    trendPart = match[2];  // "+100"
+    volumePart = match[1];
+    middlePart = match[2];
+    trendPart = match[3];
   } else {
-    // 如果不匹配，说明可能只有量级部分，例如 "5K+"
+    // 如果不匹配，则假定整个字符串都是量级部分
     volumePart = volumeStr;
   }
 
-  // --- 解析量级部分 ---
+  // --- 解析量级部分 (这部分逻辑不变) ---
   let volume = 0;
   if (volumePart) {
     const num = parseFloat(volumePart.replace(/,/g, ''));
@@ -227,8 +288,20 @@ export function parseComplexSearchVolume(volumeStr: string): { volume: number; t
     }
   }
 
-  // --- 解析趋势部分 ---
-  const trend = trendPart ? parseInt(trendPart, 10) : 0;
+  // --- 解析趋势部分 (使用新的逻辑) ---
+  let trend = 0;
+  if (trendPart) {
+    // ▼▼▼ 核心改动 2：解析前先移除逗号 ▼▼▼
+    const trendNum = parseInt(trendPart.replace(/,/g, ''), 10);
+    
+    // ▼▼▼ 核心改动 3：根据中间的文本判断趋势是正是负 ▼▼▼
+    // (让函数更具鲁棒性，即使未来出现 arrow_downward 也能正确处理)
+    if (middlePart && middlePart.toLowerCase().includes('down')) {
+      trend = -trendNum;
+    } else {
+      trend = trendNum; // 默认为正增长
+    }
+  }
   
   return { volume, trend };
 }

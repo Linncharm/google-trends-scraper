@@ -14,7 +14,8 @@ import {
   saveCsvToFile, 
   generateOutputPath, 
   ensureDirectoryExists, 
-  saveHighIntentCsvToFile
+  saveHighIntentCsvToFile,
+  getMarketGroup
 } from './utils/helpers.js';
 import { ScraperConfig, ScrapeResult } from './types/index.js';
 import { analyzeCommercialIntentBatch } from './service/analyzer.js';
@@ -146,8 +147,12 @@ async function saveResultsToSupabase(results: ScrapeResult[]): Promise<number> {
       for (const trend of result.trends) {
         // ▼▼▼ 在这里添加判断条件 ▼▼▼
         if (trend.status === 'active') { 
+
+          const group = getMarketGroup(result.country.code);
+
           trendsToInsert.push({
             country_code: result.country.code,
+            market_group: group, // <--- 新增的字段
             scraped_at: new Date(result.timestamp),
             title: trend.title,
             search_volume_base: trend.searchVolume, 

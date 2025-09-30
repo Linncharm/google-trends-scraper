@@ -1,6 +1,7 @@
 import { TrendsScheduler } from './src/scheduler.js';
 import { COUNTRIES } from './src/config/countries.js';
 import dotenv from 'dotenv';
+import { marketGroups } from './src/utils/helpers.js';
 
 // 加载环境变量
 dotenv.config();
@@ -10,31 +11,25 @@ dotenv.config();
  * 预设场景配置
  */
 
-// 场景一：高频监控 - 每6小时执行一次，适合密切关注趋势
-const highFrequencyScenario = {
-  cronExpression: '0 */6 * * *', // 每6小时
-  scraperConfig: {
-    countries: ['US', 'IN', 'ID', 'PK', 'NG', 'BR', 'MX', 'PH', 'VN', 'JP'],
+const allCountries = new Set<string>();
+Object.values(marketGroups).forEach(countries => {
+  countries.forEach(code => allCountries.add(code));
+});
+
+// 转换为数组，用于爬虫配置
+const globalKeyMarketsScenario = {
+    countries: Array.from(allCountries),
     format: 'csv' as const,
     headless: true,
     timeframe: '24',
-  },
-  emailConfig: {
-    enabled: true,
-    to: process.env.EMAIL_TO || '',
-  },
-  timezone: 'Asia/Shanghai',
 };
+// =======================================================
 
+const scenarioConfig = globalKeyMarketsScenario;
 // 场景二：标准监控 - 每天上午12点执行，适合日常使用
 const standardScenario = {
-  cronExpression: '0 12 * * *', // 每天上午12点
-  scraperConfig: {
-    countries: ['US', 'IN', 'ID', 'PK', 'NG', 'BR', 'MX', 'PH', 'VN', 'JP'],
-    format: 'csv' as const,
-    headless: true,
-    timeframe: '24',
-  },
+  cronExpression: '0 1 * * *', // 每天凌晨1点
+  scraperConfig: scenarioConfig,
   emailConfig: {
     enabled: false,
     to: process.env.EMAIL_TO || '',
@@ -42,61 +37,7 @@ const standardScenario = {
   timezone: 'Asia/Shanghai',
 };
 
-// 场景三：G7国家监控 - 每天上午8点执行
-const g7Scenario = {
-  cronExpression: '0 8 * * *', // 每天上午8点
-  scraperConfig: {
-    countries: ['US', 'GB', 'DE', 'FR', 'JP', 'CA', 'IT'],
-    format: 'csv' as const,
-    headless: true,
-    timeframe: '24',
-  },
-  emailConfig: {
-    enabled: true,
-    to: process.env.EMAIL_TO || '',
-  },
-  timezone: 'Asia/Shanghai',
-};
 
-// 场景四：工作日监控 - 工作日上午9点执行
-const weekdayScenario = {
-  cronExpression: '0 9 * * 1-5', // 工作日上午9点
-  scraperConfig: {
-    countries: ['US', 'CN', 'JP', 'DE', 'GB'],
-    format: 'csv' as const,
-    headless: true,
-    timeframe: '24',
-  },
-  emailConfig: {
-    enabled: true,
-    to: process.env.EMAIL_TO || '',
-  },
-  timezone: 'Asia/Shanghai',
-};
-
-// 场景五：测试场景 - 每2分钟执行一次（仅用于测试）
-const testScenario = {
-  cronExpression: '*/2 * * * *', 
-  scraperConfig: {
-    countries: ['BR'], // 只爬取巴西，减少测试时间
-    format: 'csv' as const,
-    headless: true,
-    timeframe: '24',
-  },
-  emailConfig: {
-    enabled: true,
-    to: process.env.EMAIL_TO || '',
-  },
-  timezone: 'Asia/Shanghai',
-};
-
-// =======================================================
-
-/**
- * 选择要运行的场景
- * 可选值：highFrequencyScenario, standardScenario, g7Scenario, weekdayScenario, testScenario
- */
-const scenarioToRun = standardScenario
 
 // =======================================================
 
@@ -105,14 +46,14 @@ const scenarioToRun = standardScenario
  */
 function validateConfig() {
   // 验证国家代码
-  const invalidCountries = scenarioToRun.scraperConfig.countries.filter(c => !COUNTRIES[c]);
+  const invalidCountries = standardScenario.scraperConfig.countries.filter(c => !COUNTRIES[c]);
   if (invalidCountries.length > 0) {
     console.error(`❌ 错误：无效的国家代码 -> ${invalidCountries.join(', ')}`);
     process.exit(1);
   }
 
   // 验证邮件配置
-  if (scenarioToRun.emailConfig.enabled) {
+  if (standardScenario.emailConfig.enabled) {
     const requiredEnvVars = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS', 'EMAIL_FROM', 'EMAIL_TO'];
     const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
     
@@ -132,21 +73,21 @@ function validateConfig() {
 function displayConfig() {
   console.log('\n🚀 Google Trends 定时任务启动器');
   console.log('==========================================');
-  console.log(`📅 Cron表达式: ${scenarioToRun.cronExpression}`);
-  console.log(`🌍 监控国家: ${scenarioToRun.scraperConfig.countries.join(', ')}`);
-  console.log(`📊 输出格式: ${scenarioToRun.scraperConfig.format.toUpperCase()}`);
-  console.log(`⏰ 时间范围: ${scenarioToRun.scraperConfig.timeframe}小时`);
-  console.log(`🕒 时区: ${scenarioToRun.timezone}`);
-  console.log(`📧 邮件发送: ${scenarioToRun.emailConfig.enabled ? '启用' : '禁用'}`);
+  console.log(`📅 Cron表达式: ${standardScenario.cronExpression}`);
+  console.log(`🌍 监控国家: ${standardScenario.scraperConfig.countries.join(', ')}`);
+  console.log(`📊 输出格式: ${standardScenario.scraperConfig.format.toUpperCase()}`);
+  console.log(`⏰ 时间范围: ${standardScenario.scraperConfig.timeframe}小时`);
+  console.log(`🕒 时区: ${standardScenario.timezone}`);
+  console.log(`📧 邮件发送: ${standardScenario.emailConfig.enabled ? '启用' : '禁用'}`);
   
-  if (scenarioToRun.emailConfig.enabled) {
-    console.log(`📮 收件人: ${scenarioToRun.emailConfig.to}`);
+  if (standardScenario.emailConfig.enabled) {
+    console.log(`📮 收件人: ${standardScenario.emailConfig.to}`);
   }
   
   console.log('==========================================');
 
   // 根据 Cron 表达式给出下次执行时间的提示
-  const cronExplain = getCronExplanation(scenarioToRun.cronExpression);
+  const cronExplain = getCronExplanation(standardScenario.cronExpression);
   console.log(`⏱️  执行频率: ${cronExplain}`);
   
   console.log('\n🎯 按 Ctrl+C 停止定时任务');
@@ -183,7 +124,7 @@ async function launchScheduler() {
     displayConfig();
     
     // 创建并启动调度器
-    const scheduler = new TrendsScheduler(scenarioToRun);
+    const scheduler = new TrendsScheduler(standardScenario);
     
     console.log('🔄 正在启动定时任务调度器...\n');
     

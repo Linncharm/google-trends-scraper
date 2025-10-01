@@ -50,7 +50,7 @@ export const TRENDS_CONFIG = {
 export function buildTrendsUrl(countryCode: string, _language: string, hours: string): string {
   const params = new URLSearchParams({
     geo: countryCode,
-    //hl: language, 保持默认en
+    hl: 'en-US',
     hours: hours
   });
   

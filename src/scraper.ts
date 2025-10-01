@@ -153,7 +153,6 @@ async function saveResultsToSupabase(results: ScrapeResult[]): Promise<number> {
           trendsToInsert.push({
             country_code: result.country.code,
             market_group: group, // <--- 新增的字段
-            scraped_at: new Date(result.timestamp),
             title: trend.title,
             search_volume_base: trend.searchVolume, 
             trend_percentage: trend.searchTrend, 
@@ -174,7 +173,7 @@ async function saveResultsToSupabase(results: ScrapeResult[]): Promise<number> {
   const { error } = await supabase
     .from('google_trends')
     .upsert(trendsToInsert, {
-      onConflict: 'country_code, title, scraped_at', // 指定冲突判定的列
+      onConflict: 'country_code, title', // 指定冲突判定的列
       ignoreDuplicates: true // 关键：如果冲突，则忽略，不更新也不报错
     });
 
